@@ -448,11 +448,57 @@ window.renderProductos = function(filtro='') {
         <td style="color:var(--muted)">${p.sku}</td>
         <td>${p.categoria}</td>
         <td>${p.proveedor}</td>
-        <td class="${stockClass(p.stock,p.stockMin)}">${p.stock}</td>
+        <td>
+          <div class="stock-edit-wrap" id="sw-${p._id}">
+            <span class="stock-display ${stockClass(p.stock,p.stockMin)}"
+                  onclick="activarEditStock('${p._id}', ${p.stock})"
+                  title="Tocá para editar">${p.stock}</span>
+          </div>
+        </td>
         <td style="color:var(--muted)">${p.stockMin}</td>
         <td><button class="btn-danger" onclick="eliminarProducto('${p._id}')">✕</button></td>
       </tr>`).join('')
     : '<tr><td colspan="7"><div class="empty"><div class="empty-icon">📦</div>No hay productos.</div></td></tr>';
+};
+
+window.activarEditStock = function(id, stockActual) {
+  const wrap = document.getElementById('sw-' + id);
+  if (!wrap) return;
+  wrap.innerHTML = `
+    <div style="display:flex;align-items:center;gap:6px;">
+      <input id="stockInput-${id}" type="number" min="0" value="${stockActual}"
+        class="stock-inline-input"
+        onkeydown="if(event.key==='Enter') guardarStock('${id}'); if(event.key==='Escape') cancelarEditStock('${id}', ${stockActual});"
+        onclick="event.stopPropagation()">
+      <button class="stock-save-btn" onclick="guardarStock('${id}')" title="Guardar">✓</button>
+      <button class="stock-cancel-btn" onclick="cancelarEditStock('${id}', ${stockActual})" title="Cancelar">✕</button>
+    </div>`;
+  const input = document.getElementById('stockInput-' + id);
+  if (input) { input.focus(); input.select(); }
+};
+
+window.cancelarEditStock = function(id, stockAnterior) {
+  const wrap = document.getElementById('sw-' + id);
+  const prod = productos.find(p => p._id === id);
+  if (!wrap || !prod) return;
+  wrap.innerHTML = `<span class="stock-display ${stockClass(prod.stock, prod.stockMin)}"
+    onclick="activarEditStock('${id}', ${prod.stock})" title="Tocá para editar">${prod.stock}</span>`;
+};
+
+window.guardarStock = async function(id) {
+  const input = document.getElementById('stockInput-' + id);
+  if (!input) return;
+  const nuevoStock = parseInt(input.value);
+  if (isNaN(nuevoStock) || nuevoStock < 0) { toast('⚠️ Valor inválido'); return; }
+
+  const prod = productos.find(p => p._id === id);
+  if (!prod) return;
+  if (nuevoStock === prod.stock) { cancelarEditStock(id, prod.stock); return; }
+
+  try {
+    await db.collection('productos').doc(id).set({ ...prod, stock: nuevoStock });
+    toast(`✅ Stock de "${prod.nombre}" actualizado a ${nuevoStock}`);
+  } catch(e) { toast('❌ Error: ' + e.message); }
 };
 
 window.renderHistorial = function(filtro='') {
@@ -846,7 +892,51 @@ window.addEventListener('DOMContentLoaded', () => {
   .import-summary .ok { color:var(--accent); font-weight:700; }
   .import-warning { background:rgba(255,201,71,.08); border:1px solid rgba(255,201,71,.3); border-radius:8px; padding:10px 14px; font-size:12px; margin-top:8px; color:#ffc947; }
 
-  /* ── Buscador de producto en movimientos ── */
+  /* ── Edición de stock inline ── */
+  .stock-display {
+    cursor: pointer;
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: 1px dashed transparent;
+    display: inline-block;
+    font-weight: 700;
+    transition: all .15s;
+    min-width: 36px; text-align: center;
+  }
+  .stock-display:hover {
+    border-color: var(--accent);
+    background: rgba(0,229,160,.07);
+  }
+  .stock-display::after {
+    content: ' ✎';
+    font-size: 10px;
+    opacity: 0;
+    transition: opacity .15s;
+  }
+  .stock-display:hover::after { opacity: .5; }
+
+  .stock-inline-input {
+    width: 70px !important; padding: 5px 8px !important;
+    font-size: 14px !important; font-weight: 700;
+    border-radius: 6px; text-align: center;
+    border: 1px solid var(--accent) !important;
+    background: var(--bg); color: var(--text);
+    font-family: 'Syne', sans-serif;
+    outline: none;
+  }
+  .stock-save-btn {
+    padding: 5px 9px; border-radius: 6px; border: none; cursor: pointer;
+    background: var(--accent); color: #0d0f14;
+    font-size: 13px; font-weight: 800; transition: all .15s;
+  }
+  .stock-save-btn:hover { background: #00ffb3; }
+  .stock-cancel-btn {
+    padding: 5px 8px; border-radius: 6px; cursor: pointer;
+    background: rgba(255,107,74,.1); border: 1px solid rgba(255,107,74,.3);
+    color: var(--salida); font-size: 12px; transition: all .15s;
+  }
+  .stock-cancel-btn:hover { background: rgba(255,107,74,.2); }
+  .stock-edit-wrap { display: flex; align-items: center; }
   .prod-search-wrap { position:relative; }
   .prod-dropdown {
     position:absolute; z-index:200;
